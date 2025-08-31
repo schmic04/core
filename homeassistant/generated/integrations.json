@@ -1685,6 +1685,12 @@
       "config_flow": true,
       "iot_class": "local_polling"
     },
+    "ems_balcony_solar": {
+      "name": "EMS Balcony Solar",
+      "integration_type": "hub",
+      "config_flow": true,
+      "iot_class": "local_polling"
+    },
     "emulated_hue": {
       "name": "Emulated Hue",
       "integration_type": "hub",

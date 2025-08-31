@@ -171,6 +171,7 @@ FLOWS = {
         "elvia",
         "emoncms",
         "emonitor",
+        "ems_balcony_solar",
         "emulated_roku",
         "energenie_power_sockets",
         "energyzero",

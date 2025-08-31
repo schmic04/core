@@ -422,6 +422,8 @@ build.json @home-assistant/supervisor
 /tests/components/emoncms/ @borpin @alexandrecuer
 /homeassistant/components/emonitor/ @bdraco
 /tests/components/emonitor/ @bdraco
+/homeassistant/components/ems_balcony_solar/ @schmic04
+/tests/components/ems_balcony_solar/ @schmic04
 /homeassistant/components/emulated_hue/ @bdraco @Tho85
 /tests/components/emulated_hue/ @bdraco @Tho85
 /homeassistant/components/emulated_kasa/ @kbickar
