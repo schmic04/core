@@ -84,7 +84,7 @@ class EmsBalconySolarBinarySensor(BinarySensorEntity):
 
     def _get_num_price_sublists_sensor(self) -> str:
         """Get the entity ID for the num_price_sublists sensor created by this integration."""
-        return "sensor.ems_balcony_solar_number_price_sublists"
+        return "sensor.ems_balcony_solar_epex_price_sublists"
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""

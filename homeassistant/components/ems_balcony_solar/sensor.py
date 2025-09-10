@@ -60,8 +60,8 @@ async def async_setup_entry(
             nordpool_sensor,
             window_sensor,
             hours_of_operating_sensor,
-            "num_price_sublists",
-            "Number Price Sublists",
+            "epex_price_sublists",
+            "EPEX Price Sublists",
         ),
     ]
 
@@ -220,7 +220,7 @@ class EmsBalconySolarSensor(SensorEntity):
                         "hours_of_operating_sensor": self._hours_of_operating_sensor,
                     }
 
-                case "num_price_sublists":
+                case "epex_price_sublists":
                     sublists, index_lists = dynamic_sublists_with_window(
                         nordpool_prices, window=window_value
                     )
