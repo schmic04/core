@@ -12,20 +12,22 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
-
-# from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import (
-    CONF_HOURS_OF_OPERATING,
     CONF_NORDPOOL_SENSOR,
-    CONF_WINDOW_SENSOR,
-    DEFAULT_HOURS_OF_OPERATING,
     DEFAULT_WINDOW,
     DOMAIN,
+    MINUTES_PER_HOUR,
+    MINUTES_PER_QUARTER_HOUR,
+    TIME_RESOLUTION_DEFAULT,
 )
-from .ems_tools import dynamic_sublists_with_window
+from .ems_tools import (
+    convert_hours_to_minutes,
+    dynamic_sublists_with_window,
+    get_resolution_minutes,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,32 +36,26 @@ async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
-    # async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EMS Balcony Solar sensors from a config entry."""
     nordpool_sensor = entry.data[CONF_NORDPOOL_SENSOR]
-    window_sensor = entry.data[CONF_WINDOW_SENSOR]
-    hours_of_operating_sensor = entry.data[CONF_HOURS_OF_OPERATING]
 
     sensors = [
         EmsBalconySolarSensor(
+            entry.entry_id,
             nordpool_sensor,
-            window_sensor,
-            hours_of_operating_sensor,
             "price_avg",
             "Price Average",
         ),
         EmsBalconySolarSensor(
+            entry.entry_id,
             nordpool_sensor,
-            window_sensor,
-            hours_of_operating_sensor,
             "price_list_length",
             "Price List Length",
         ),
         EmsBalconySolarSensor(
+            entry.entry_id,
             nordpool_sensor,
-            window_sensor,
-            hours_of_operating_sensor,
             "epex_price_sublists",
             "EPEX Price Sublists",
         ),
@@ -75,16 +71,14 @@ class EmsBalconySolarSensor(SensorEntity):
 
     def __init__(
         self,
+        entry_id: str,
         nordpool_sensor: str,
-        window_sensor: str,
-        hours_of_operating_sensor: str,
         sensor_type: str,
         name: str,
     ) -> None:
         """Initialize the sensor."""
+        self._entry_id = entry_id
         self._nordpool_sensor = nordpool_sensor
-        self._window_sensor = window_sensor
-        self._hours_of_operating_sensor = hours_of_operating_sensor
         self._sensor_type = sensor_type
         self._attr_name = name
         self._attr_unique_id = f"{nordpool_sensor}_{sensor_type}"
@@ -96,17 +90,71 @@ class EmsBalconySolarSensor(SensorEntity):
         )
         self._unsubscribe_callback: Callable[[], None] | None = None
 
+        # Generate entity IDs that match the unique_id pattern from number.py and select.py
+        # number.py creates: unique_id = f"{nordpool_sensor}_{description.key}"
+        # This becomes entity_id: number.{unique_id} = number.{nordpool_sensor}_{description.key}
+        self._window_number = f"number.{nordpool_sensor}_window_size"
+        self._time_resolution_select = f"select.{nordpool_sensor}_time_resolution"
+
+    def _get_time_resolution_setting(self) -> str:
+        """Get the current time resolution setting from select entity."""
+        select_state = self.hass.states.get(self._time_resolution_select)
+
+        if not select_state or select_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return TIME_RESOLUTION_DEFAULT
+
+        return select_state.state
+
+    def _expand_price_data_for_resolution(
+        self, nordpool_prices: list[float]
+    ) -> list[float]:
+        """Expand price data based on time resolution setting.
+
+        Args:
+            nordpool_prices: Hourly price data from Nordpool
+
+        Returns:
+            Price data expanded according to time resolution
+        """
+        time_resolution = self._get_time_resolution_setting()
+        resolution_minutes = get_resolution_minutes(time_resolution)
+
+        if resolution_minutes == MINUTES_PER_QUARTER_HOUR:
+            # Expand hourly data to 15-minute intervals by repeating each price 4 times
+            expanded_prices = []
+            for price in nordpool_prices:
+                expanded_prices.extend([price] * 4)  # 4 × 15min = 60min
+            return expanded_prices
+
+        # For hourly resolution, use data as-is
+        return nordpool_prices
+
+    def _get_resolution_info(self) -> tuple[int, int, str]:
+        """Get resolution information for current time setting.
+
+        Returns:
+            Tuple of (resolution_minutes, entries_per_hour, unit_name)
+        """
+        time_resolution = self._get_time_resolution_setting()
+        resolution_minutes = get_resolution_minutes(time_resolution)
+
+        if resolution_minutes == MINUTES_PER_QUARTER_HOUR:
+            return MINUTES_PER_QUARTER_HOUR, 4, "15-minute intervals"
+
+        return MINUTES_PER_HOUR, 1, "hourly intervals"
+
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
 
-        # Track nordpool, window and hours of operating sensor changes
+        # Track nordpool, window, and time resolution sensor changes
+        # Note: hours_of_operating is not tracked as it's only used by binary_sensor
         self._unsubscribe_callback = async_track_state_change_event(
             self.hass,
             [
                 self._nordpool_sensor,
-                self._window_sensor,
-                self._hours_of_operating_sensor,
+                self._window_number,  # ✅ Jetzt überwacht
+                self._time_resolution_select,
             ],
             self._handle_sensor_state_change,
         )
@@ -124,8 +172,8 @@ class EmsBalconySolarSensor(SensorEntity):
         self.hass.async_create_task(self._update_from_sensors())
 
     def _get_window_value(self) -> int:
-        """Get the window value from window sensor or default."""
-        window_state = self.hass.states.get(self._window_sensor)
+        """Get the window value from number entity or default."""
+        window_state = self.hass.states.get(self._window_number)
 
         if not window_state or window_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return DEFAULT_WINDOW
@@ -134,24 +182,8 @@ class EmsBalconySolarSensor(SensorEntity):
             window_value = int(float(window_state.state))
             return max(1, window_value)
         except (ValueError, TypeError):
-            _LOGGER.debug("Invalid window sensor value: %s", window_state.state)
+            _LOGGER.debug("Invalid window number value: %s", window_state.state)
             return DEFAULT_WINDOW
-
-    def _get_hours_of_operating_value(self) -> int:
-        """Get the hours of operating value from sensor or default."""
-        hours_state = self.hass.states.get(self._hours_of_operating_sensor)
-
-        if not hours_state or hours_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            return DEFAULT_HOURS_OF_OPERATING
-
-        try:
-            hours_value = int(float(hours_state.state))
-            return max(1, hours_value)
-        except (ValueError, TypeError):
-            _LOGGER.debug(
-                "Invalid hours of operating sensor value: %s", hours_state.state
-            )
-            return DEFAULT_HOURS_OF_OPERATING
 
     async def _update_from_sensors(self) -> None:
         """Update sensor value based on input sensor data."""
@@ -182,8 +214,14 @@ class EmsBalconySolarSensor(SensorEntity):
                 self.async_write_ha_state()
                 return
 
-            window_value = self._get_window_value()
-            hours_of_operating_value = self._get_hours_of_operating_value()
+            window_value_hours = self._get_window_value()
+            time_resolution = self._get_time_resolution_setting()
+            resolution_minutes, entries_per_hour, unit_name = (
+                self._get_resolution_info()
+            )
+
+            # Convert hours to minutes for internal calculations
+            window_value_minutes = convert_hours_to_minutes(window_value_hours)
 
             match self._sensor_type:
                 case "price_avg":
@@ -197,38 +235,65 @@ class EmsBalconySolarSensor(SensorEntity):
                         "today_count": len(today_prices),
                         "tomorrow_count": len(tomorrow_prices) if tomorrow_valid else 0,
                         "tomorrow_valid": tomorrow_valid,
-                        "window_value": window_value,
-                        "hours_of_operating": hours_of_operating_value,
-                        "window_sensor": self._window_sensor,
-                        "hours_of_operating_sensor": self._hours_of_operating_sensor,
+                        "window_value_hours": window_value_hours,
+                        "window_value_minutes": window_value_minutes,
+                        "time_resolution_setting": time_resolution,
+                        "resolution_minutes": resolution_minutes,
+                        "resolution_unit": unit_name,
+                        "window_number": self._window_number,
+                        "time_resolution_sensor": self._time_resolution_select,
                     }
 
                 case "price_list_length":
-                    self._attr_native_value = len(nordpool_prices)
+                    # Expand price data based on resolution
+                    expanded_prices = self._expand_price_data_for_resolution(
+                        nordpool_prices
+                    )
+
+                    self._attr_native_value = len(expanded_prices)
                     self._attr_unit_of_measurement = None
                     self._attr_extra_state_attributes = {
-                        "price_list": nordpool_prices,
-                        "count": len(nordpool_prices),
+                        "price_list": expanded_prices,
+                        "count": len(expanded_prices),
+                        "original_hourly_prices": nordpool_prices,
                         "today_prices": today_prices,
                         "tomorrow_prices": tomorrow_prices if tomorrow_valid else [],
                         "today_count": len(today_prices),
                         "tomorrow_count": len(tomorrow_prices) if tomorrow_valid else 0,
                         "tomorrow_valid": tomorrow_valid,
-                        "window_value": window_value,
-                        "hours_of_operating": hours_of_operating_value,
-                        "window_sensor": self._window_sensor,
-                        "hours_of_operating_sensor": self._hours_of_operating_sensor,
+                        "window_value_hours": window_value_hours,
+                        "window_value_minutes": window_value_minutes,
+                        "time_resolution_setting": time_resolution,
+                        "resolution_minutes": resolution_minutes,
+                        "resolution_unit": unit_name,
+                        "entries_per_hour": entries_per_hour,
+                        "window_number": self._window_number,
+                        "time_resolution_sensor": self._time_resolution_select,
                     }
 
                 case "epex_price_sublists":
+                    # Expand price data based on resolution for sublist processing
+                    expanded_prices = self._expand_price_data_for_resolution(
+                        nordpool_prices
+                    )
+
+                    # Calculate window in time entries based on resolution
+                    window_entries = window_value_minutes // resolution_minutes
+                    window_entries = max(1, window_entries)  # Ensure at least 1 entry
+
                     sublists, index_lists = dynamic_sublists_with_window(
-                        nordpool_prices, window=window_value
+                        expanded_prices, window=window_entries
                     )
                     sublist_sums = [sum(sublist) for sublist in sublists]
                     sublist_avgs = [
                         (sum(sublist) / len(sublist)) for sublist in sublists
                     ]
                     sublist_lengths = [len(sublist) for sublist in sublists]
+
+                    # Convert sublist durations to minutes for user-friendly display
+                    sublist_durations_minutes = [
+                        length * resolution_minutes for length in sublist_lengths
+                    ]
 
                     self._attr_native_value = len(sublists)
                     self._attr_unit_of_measurement = None
@@ -237,14 +302,22 @@ class EmsBalconySolarSensor(SensorEntity):
                         "sublist_sums": sublist_sums,
                         "sublist_avgs": sublist_avgs,
                         "sublist_lengths": sublist_lengths,
+                        "sublist_durations_minutes": sublist_durations_minutes,
                         "index_lists": index_lists,
                         "sublist_count": len(sublists),
-                        "nordpool_prices": nordpool_prices,
+                        "expanded_prices": expanded_prices,
+                        "expanded_prices_length": len(expanded_prices),
+                        "original_hourly_prices": nordpool_prices,
                         "nordpool_prices_length": len(nordpool_prices),
-                        "window_value": window_value,
-                        "hours_of_operating": hours_of_operating_value,
-                        "window_sensor": self._window_sensor,
-                        "hours_of_operating_sensor": self._hours_of_operating_sensor,
+                        "window_value_hours": window_value_hours,
+                        "window_value_minutes": window_value_minutes,
+                        "window_entries": window_entries,
+                        "time_resolution_setting": time_resolution,
+                        "resolution_minutes": resolution_minutes,
+                        "resolution_unit": unit_name,
+                        "entries_per_hour": entries_per_hour,
+                        "window_number": self._window_number,
+                        "time_resolution_sensor": self._time_resolution_select,
                     }
 
         except (ValueError, TypeError, KeyError) as exc:

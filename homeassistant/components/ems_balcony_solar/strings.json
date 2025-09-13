@@ -2,18 +2,53 @@
   "config": {
     "step": {
       "user": {
-        "description": "Configure EMS Balcony Solar integration",
+        "title": "Configure EMS Balcony Solar",
+        "description": "Select the Nordpool sensor and optionally an hours of operating entity.",
         "data": {
-          "nordpool_sensor": "Nordpool Price Sensor",
-          "window_sensor": "Window Size (input_number)",
-          "hours_of_operating": "Hours of Operating (input_number)"
+          "nordpool_sensor": "Nordpool sensor",
+          "hours_of_operating": "Hours of operating entity"
         }
       }
     },
     "error": {
-      "entity_not_found": "Selected entity does not exist",
-      "invalid_window_value": "Window value must be at least 1",
-      "invalid_hours_of_operating": "Hours of operating must be at least 1"
+      "entity_not_found": "The selected entity was not found",
+      "cannot_connect": "Failed to connect",
+      "unknown": "Unexpected error occurred"
+    }
+  },
+  "entity": {
+    "select": {
+      "time_resolution": {
+        "name": "Time resolution",
+        "state": {
+          "hourly": "Hourly",
+          "15_minutes": "15 minutes"
+        }
+      }
+    },
+    "number": {
+      "window_size": {
+        "name": "Window size"
+      },
+      "hours_of_operating": {
+        "name": "Hours of operating"
+      }
+    },
+    "sensor": {
+      "price_avg": {
+        "name": "Price average"
+      },
+      "price_list_length": {
+        "name": "Price list length"
+      },
+      "epex_price_sublists": {
+        "name": "EPEX price sublists"
+      }
+    },
+    "binary_sensor": {
+      "current_time_optimal": {
+        "name": "Current time optimal"
+      }
     }
   }
 }

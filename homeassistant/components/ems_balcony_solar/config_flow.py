@@ -14,7 +14,7 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_HOURS_OF_OPERATING,
     CONF_NORDPOOL_SENSOR,
-    CONF_WINDOW_SENSOR,
+    CREATE_HOURS_NUMBER_ENTITY,
     DOMAIN,
 )
 
@@ -68,31 +68,50 @@ class EMSBalconySolarConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             # Validate that selected entities exist
             nordpool_entity = user_input[CONF_NORDPOOL_SENSOR]
-            window_entity = user_input[CONF_WINDOW_SENSOR]
-            hours_entity = user_input[CONF_HOURS_OF_OPERATING]
+            hours_entity = user_input.get(CONF_HOURS_OF_OPERATING)
 
             if not self.hass.states.get(nordpool_entity):
                 errors[CONF_NORDPOOL_SENSOR] = "entity_not_found"
 
-            if not self.hass.states.get(window_entity):
-                errors[CONF_WINDOW_SENSOR] = "entity_not_found"
-
-            if not self.hass.states.get(hours_entity):
-                errors[CONF_HOURS_OF_OPERATING] = "entity_not_found"
+            # Only validate hours entity if one was selected
+            if hours_entity and hours_entity != CREATE_HOURS_NUMBER_ENTITY:
+                if not self.hass.states.get(hours_entity):
+                    errors[CONF_HOURS_OF_OPERATING] = "entity_not_found"
 
             if not errors:
                 # Create unique ID based on nordpool sensor
                 await self.async_set_unique_id(nordpool_entity)
                 self._abort_if_unique_id_configured()
 
+                # Prepare config data
+                config_data = {CONF_NORDPOOL_SENSOR: nordpool_entity}
+
+                # Add hours of operating config if selected
+                if hours_entity:
+                    config_data[CONF_HOURS_OF_OPERATING] = hours_entity
+
                 return self.async_create_entry(
                     title=f"EMS Balcony Solar ({nordpool_entity.split('.')[-1]})",
-                    data=user_input,
+                    data=config_data,
                 )
 
         # Get available entities for dropdowns
         nordpool_entities = self._get_nordpool_sensor_entities()
         input_number_entities = self._get_input_number_entities()
+
+        # Create hours of operating options with special option for integration-created entity
+        hours_options: list[selector.SelectOptionDict] = [
+            selector.SelectOptionDict(
+                value=CREATE_HOURS_NUMBER_ENTITY,
+                label="Create integration number entity",
+            ),
+        ]
+
+        # Add input_number entities as options
+        hours_options.extend(
+            selector.SelectOptionDict(value=entity_id, label=entity_id)
+            for entity_id in input_number_entities
+        )
 
         data_schema = vol.Schema(
             {
@@ -102,16 +121,10 @@ class EMSBalconySolarConfigFlow(ConfigFlow, domain=DOMAIN):
                         include_entities=nordpool_entities or [],
                     )
                 ),
-                vol.Required(CONF_WINDOW_SENSOR): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain=INPUT_NUMBER_DOMAIN,
-                        include_entities=input_number_entities or [],
-                    )
-                ),
-                vol.Required(CONF_HOURS_OF_OPERATING): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain=INPUT_NUMBER_DOMAIN,
-                        include_entities=input_number_entities or [],
+                vol.Optional(CONF_HOURS_OF_OPERATING): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=hours_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
             }
