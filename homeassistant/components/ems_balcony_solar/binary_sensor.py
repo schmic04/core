@@ -24,14 +24,21 @@ from .const import (
     CREATE_HOURS_NUMBER_ENTITY,
     DEFAULT_HOURS_OF_OPERATING,
     DOMAIN,
+    ENTITY_NAME_CURRENT_TIME_OPTIMAL,
+    ENTITY_SUFFIX_CURRENT_TIME_OPTIMAL,
+    ENTITY_SUFFIX_EPEX_PRICE_SUBLISTS,
+    ENTITY_SUFFIX_HOURS_OF_OPERATING,
+    ENTITY_SUFFIX_TIME_RESOLUTION,
     MINUTES_PER_QUARTER_HOUR,
     TIME_RESOLUTION_DEFAULT,
+    get_entity_id,
+    get_entity_unique_id,
 )
 from .ems_tools import (
-    convert_hours_to_minutes,  # ✅ Für Stunden → Minuten Konvertierung
-    convert_minutes_to_hours,  # ✅ Für Minuten → Stunden Konvertierung
-    get_resolution_minutes,  # ✅ Für Zeit-Resolution Ermittlung
-    minutes_to_time_index,  # ✅ Für aktuellen Zeit-Index
+    convert_hours_to_minutes,
+    convert_minutes_to_hours,
+    get_resolution_minutes,
+    minutes_to_time_index,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,23 +64,28 @@ class EmsBalconySolarBinarySensor(BinarySensorEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, entry_id: str, nordpool_sensor: str) -> None:
+    def __init__(self, config_entry_id: str, nordpool_sensor: str) -> None:
         """Initialize the binary sensor."""
         self._nordpool_sensor = nordpool_sensor
-        self._attr_name = "Current Time Optimal"
-        self._attr_unique_id = f"{nordpool_sensor}_current_time_optimal"
+        self._attr_name = ENTITY_NAME_CURRENT_TIME_OPTIMAL
+        self._attr_unique_id = get_entity_unique_id(
+            config_entry_id, ENTITY_SUFFIX_CURRENT_TIME_OPTIMAL
+        )
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, nordpool_sensor)},
+            identifiers={(DOMAIN, config_entry_id)},
             name="EMS Balcony Solar",
             manufacturer="EMS",
             model="Balcony Solar",
         )
         self._unsubscribe_callbacks: list[Callable[[], None]] = []
 
-        # Generate entity IDs for internal sensors from nordpool sensor
-        nordpool_base = nordpool_sensor.replace("sensor.", "")
-        self._hours_of_operating_number = f"number.{nordpool_base}_hours_of_operating"
-        self._time_resolution_select = f"select.{nordpool_base}_time_resolution"
+        # Generate entity IDs using consistent schema
+        self._hours_of_operating_number = get_entity_id(
+            "number", ENTITY_SUFFIX_HOURS_OF_OPERATING
+        )
+        self._time_resolution_select = get_entity_id(
+            "select", ENTITY_SUFFIX_TIME_RESOLUTION
+        )
 
     def _get_hours_of_operating_value(self) -> int:
         """Get the hours of operating value from number entity or external sensor or default."""
@@ -122,7 +134,7 @@ class EmsBalconySolarBinarySensor(BinarySensorEntity):
 
     def _get_num_price_sublists_sensor(self) -> str:
         """Get the entity ID for the num_price_sublists sensor created by this integration."""
-        return "sensor.ems_balcony_solar_epex_price_sublists"
+        return get_entity_id("sensor", ENTITY_SUFFIX_EPEX_PRICE_SUBLISTS)
 
     def _get_current_time_index(self) -> int:
         """Get the current time index based on resolution setting."""

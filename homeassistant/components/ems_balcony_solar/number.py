@@ -21,30 +21,33 @@ from .const import (
     DEFAULT_HOURS_OF_OPERATING,
     DEFAULT_WINDOW,
     DOMAIN,
+    ENTITY_NAME_HOURS_OF_OPERATING,
+    ENTITY_NAME_WINDOW_SIZE,
+    ENTITY_SUFFIX_HOURS_OF_OPERATING,
+    ENTITY_SUFFIX_WINDOW_SIZE,
+    get_entity_unique_id,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 NUMBER_DESCRIPTIONS: tuple[NumberEntityDescription, ...] = (
     NumberEntityDescription(
-        key="window_size",
-        name="Window Size",
-        icon="mdi:window-open-variant",
+        key=ENTITY_SUFFIX_WINDOW_SIZE,
+        name=ENTITY_NAME_WINDOW_SIZE,
+        icon="mdi:resize",
+        mode=NumberMode.BOX,
         native_min_value=1,
         native_max_value=24,
         native_step=1,
-        native_unit_of_measurement="hours",
-        mode=NumberMode.BOX,
     ),
     NumberEntityDescription(
-        key="hours_of_operating",
-        name="Hours of Operating",
-        icon="mdi:clock-time-eight-outline",
+        key=ENTITY_SUFFIX_HOURS_OF_OPERATING,
+        name=ENTITY_NAME_HOURS_OF_OPERATING,
+        icon="mdi:clock-time-four-outline",
+        mode=NumberMode.BOX,
         native_min_value=1,
         native_max_value=24,
         native_step=1,
-        native_unit_of_measurement="hours",
-        mode=NumberMode.BOX,
     ),
 )
 
@@ -85,23 +88,23 @@ async def async_setup_entry(
 
 
 class EmsBalconySolarNumber(NumberEntity):
-    """Number entity for EMS Balcony Solar settings."""
+    """Number entity for EMS Balcony Solar configuration."""
 
     _attr_has_entity_name = True
 
     def __init__(
         self,
-        entry_id: str,
+        config_entry_id: str,
         nordpool_sensor: str,
         description: NumberEntityDescription,
-        default_value: float,
+        default_value: int,
     ) -> None:
         """Initialize the number entity."""
-        self.entity_description = description
         self._nordpool_sensor = nordpool_sensor
-        self._attr_unique_id = f"{nordpool_sensor}_{description.key}"
+        self.entity_description = description
+        self._attr_unique_id = get_entity_unique_id(config_entry_id, description.key)
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, nordpool_sensor)},
+            identifiers={(DOMAIN, config_entry_id)},
             name="EMS Balcony Solar",
             manufacturer="EMS",
             model="Balcony Solar",

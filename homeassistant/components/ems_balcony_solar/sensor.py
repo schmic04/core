@@ -19,9 +19,19 @@ from .const import (
     CONF_NORDPOOL_SENSOR,
     DEFAULT_WINDOW,
     DOMAIN,
+    ENTITY_NAME_EPEX_PRICE_SUBLISTS,
+    ENTITY_NAME_PRICE_AVG,
+    ENTITY_NAME_PRICE_LIST_LENGTH,
+    ENTITY_SUFFIX_EPEX_PRICE_SUBLISTS,
+    ENTITY_SUFFIX_PRICE_AVG,
+    ENTITY_SUFFIX_PRICE_LIST_LENGTH,
+    ENTITY_SUFFIX_TIME_RESOLUTION,
+    ENTITY_SUFFIX_WINDOW_SIZE,
     MINUTES_PER_HOUR,
     MINUTES_PER_QUARTER_HOUR,
     TIME_RESOLUTION_DEFAULT,
+    get_entity_id,
+    get_entity_unique_id,
 )
 from .ems_tools import (
     convert_hours_to_minutes,
@@ -44,20 +54,20 @@ async def async_setup_entry(
         EmsBalconySolarSensor(
             entry.entry_id,
             nordpool_sensor,
-            "price_avg",
-            "Price Average",
+            ENTITY_SUFFIX_PRICE_AVG,
+            ENTITY_NAME_PRICE_AVG,
         ),
         EmsBalconySolarSensor(
             entry.entry_id,
             nordpool_sensor,
-            "price_list_length",
-            "Price List Length",
+            ENTITY_SUFFIX_PRICE_LIST_LENGTH,
+            ENTITY_NAME_PRICE_LIST_LENGTH,
         ),
         EmsBalconySolarSensor(
             entry.entry_id,
             nordpool_sensor,
-            "epex_price_sublists",
-            "EPEX Price Sublists",
+            ENTITY_SUFFIX_EPEX_PRICE_SUBLISTS,
+            ENTITY_NAME_EPEX_PRICE_SUBLISTS,
         ),
     ]
 
@@ -71,30 +81,29 @@ class EmsBalconySolarSensor(SensorEntity):
 
     def __init__(
         self,
-        entry_id: str,
+        config_entry_id: str,
         nordpool_sensor: str,
         sensor_type: str,
         name: str,
     ) -> None:
         """Initialize the sensor."""
-        self._entry_id = entry_id
         self._nordpool_sensor = nordpool_sensor
         self._sensor_type = sensor_type
         self._attr_name = name
-        self._attr_unique_id = f"{nordpool_sensor}_{sensor_type}"
+        self._attr_unique_id = get_entity_unique_id(config_entry_id, sensor_type)
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, nordpool_sensor)},
+            identifiers={(DOMAIN, config_entry_id)},
             name="EMS Balcony Solar",
             manufacturer="EMS",
             model="Balcony Solar",
         )
         self._unsubscribe_callback: Callable[[], None] | None = None
 
-        # Generate entity IDs that match the unique_id pattern from number.py and select.py
-        # number.py creates: unique_id = f"{nordpool_sensor}_{description.key}"
-        # This becomes entity_id: number.{unique_id} = number.{nordpool_sensor}_{description.key}
-        self._window_number = f"number.{nordpool_sensor}_window_size"
-        self._time_resolution_select = f"select.{nordpool_sensor}_time_resolution"
+        # Generate entity IDs using consistent schema
+        self._window_number = get_entity_id("number", ENTITY_SUFFIX_WINDOW_SIZE)
+        self._time_resolution_select = get_entity_id(
+            "select", ENTITY_SUFFIX_TIME_RESOLUTION
+        )
 
     def _get_time_resolution_setting(self) -> str:
         """Get the current time resolution setting from select entity."""

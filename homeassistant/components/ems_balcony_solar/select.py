@@ -13,8 +13,11 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import (
     CONF_NORDPOOL_SENSOR,
     DOMAIN,
+    ENTITY_NAME_TIME_RESOLUTION,
+    ENTITY_SUFFIX_TIME_RESOLUTION,
     TIME_RESOLUTION_DEFAULT,
     TIME_RESOLUTION_OPTIONS,
+    get_entity_unique_id,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,13 +43,15 @@ class EmsBalconySolarSelect(SelectEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, entry_id: str, nordpool_sensor: str) -> None:
+    def __init__(self, config_entry_id: str, nordpool_sensor: str) -> None:
         """Initialize the select entity."""
         self._nordpool_sensor = nordpool_sensor
-        self._attr_name = "Time Resolution"
-        self._attr_unique_id = f"{nordpool_sensor}_time_resolution"
+        self._attr_name = ENTITY_NAME_TIME_RESOLUTION
+        self._attr_unique_id = get_entity_unique_id(
+            config_entry_id, ENTITY_SUFFIX_TIME_RESOLUTION
+        )
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, nordpool_sensor)},
+            identifiers={(DOMAIN, config_entry_id)},
             name="EMS Balcony Solar",
             manufacturer="EMS",
             model="Balcony Solar",
